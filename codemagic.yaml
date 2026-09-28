@@ -67,7 +67,8 @@ workflows:
           app-store-connect publish --path build/ios/ipa/*.ipa \
             --issuer-id @env:APP_STORE_CONNECT_ISSUER_ID \
             --key-id @env:APP_STORE_CONNECT_KEY_IDENTIFIER \
-            --private-key "@file:$HOME/sleutels/asc.p8"
+            --private-key "@file:$HOME/sleutels/asc.p8" \
+            --whats-new "Video player app. Test build."
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
