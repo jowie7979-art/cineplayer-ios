@@ -1,4 +1,4 @@
-# CinePlayer: eigen app van Jawad, ad hoc op zijn eigen iPhone.
+# CinePlayer: eigen app van Jawad (native SwiftUI, map Native/), ad hoc op zijn eigen iPhone.
 # Bouwt in de Codemagic-app valorem-ios (tak cineplayer), zodat de sleutels uit
 # de groep valorem_appstore gebruikt worden. De IPA gaat naar
 # https://valorembelastingadvies.nl/installeer/cineplayer (openen in Safari).
@@ -13,23 +13,11 @@ workflows:
         - valorem_appstore
       vars:
         BUNDLE_ID: nl.jawad.cineplayer
-        XCODE_PROJECT: ios/App/App.xcodeproj
-        XCODE_SCHEME: App
+        XCODE_PROJECT: Native/CinePlayer.xcodeproj
+        XCODE_SCHEME: CinePlayer
         SITE: https://valorembelastingadvies.nl
       xcode: 27.0
-      node: 22
     scripts:
-      - name: Capacitor-project maken
-        script: |
-          set -eo pipefail
-          npm install
-          npx cap add ios
-          npx cap sync ios
-          INFO=ios/App/App/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$INFO" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$INFO" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$INFO" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" "$INFO" 2>/dev/null || true
       - name: Sleutels
         script: |
           set -eo pipefail
@@ -96,7 +84,7 @@ workflows:
         script: |
           sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = $BUILD_NUMBER;/g" "$XCODE_PROJECT/project.pbxproj"
           echo "NUMMER=$BUILD_NUMBER" >> $CM_ENV
-          echo "VERSIE=1.0" >> $CM_ENV
+          echo "VERSIE=2.0" >> $CM_ENV
       - name: Bouwen
         script: |
           mkdir -p build
