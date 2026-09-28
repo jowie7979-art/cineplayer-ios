@@ -23,6 +23,8 @@ struct ThuisScherm: View {
     @State private var totaal = 1
     @State private var laden = false
     @State private var uitgelicht: [Titel] = []
+    @State private var fout = false
+    @Namespace private var zoom
 
     private var sleutel: String { "\(serie)-\(genre?.id ?? 0)-\(sortering.rawValue)" }
     private var soort: String { serie ? "tv" : "movie" }
@@ -31,14 +33,28 @@ struct ThuisScherm: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 26) {
-                    if !uitgelicht.isEmpty {
-                        Uitgelicht(titels: uitgelicht, serie: serie)
+                    if uitgelicht.isEmpty {
+                        Skelet(verhouding: 16 / 10).padding(.horizontal).frame(height: 240)
+                    } else {
+                        Uitgelicht(titels: uitgelicht, serie: serie, zoom: zoom)
                     }
                     if !bib.geschiedenis.isEmpty {
                         Rij(titel: "Verder kijken") {
                             ForEach(bib.geschiedenis) { b in
-                                NavigationLink(value: b.keuze) { BewaardKaart(bewaard: b, toonStand: true) }
-                                    .buttonStyle(.plain)
+                                Button {
+                                    bib.speel(b.keuze, seizoen: b.seizoen, aflevering: b.aflevering)
+                                } label: {
+                                    VerderKaart(bewaard: b)
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button("Weghalen uit Verder kijken", systemImage: "xmark.circle", role: .destructive) {
+                                        withAnimation(.snappy) { bib.verwijder(b) }
+                                    }
+                                }
+                                .scrollTransition(.interactive, axis: .horizontal) { c, f in
+                                    c.scaleEffect(f.isIdentity ? 1 : 0.95).opacity(f.isIdentity ? 1 : 0.75)
+                                }
                             }
                         }
                     }
@@ -47,6 +63,10 @@ struct ThuisScherm: View {
                             ForEach(bib.favorieten) { b in
                                 NavigationLink(value: b.keuze) { BewaardKaart(bewaard: b) }
                                     .buttonStyle(.plain)
+                                    .matchedTransitionSource(id: b.keuze, in: zoom)
+                                    .scrollTransition(.interactive, axis: .horizontal) { c, f in
+                                        c.scaleEffect(f.isIdentity ? 1 : 0.94).opacity(f.isIdentity ? 1 : 0.75)
+                                    }
                             }
                         }
                     }
@@ -67,15 +87,21 @@ struct ThuisScherm: View {
                     .frame(width: 160)
                 }
             }
-            .navigationDestination(for: Keuze.self) { DetailScherm(keuze: $0) }
+            .navigationDestination(for: Keuze.self) { k in
+                DetailScherm(keuze: k).navigationTransition(.zoom(sourceID: k, in: zoom))
+            }
             .task(id: serie) {
                 genre = nil
+                uitgelicht = []
                 async let g: GenreLijst? = TMDB.haal("/genre/\(soort)/list")
                 async let u: Pagina? = TMDB.haal("/trending/\(soort)/week")
                 genres = await g?.genres ?? []
                 uitgelicht = Array((await u?.results ?? []).filter { $0.backdrop_path != nil }.prefix(6))
             }
-            .task(id: sleutel) { await laad(opnieuw: true) }
+            .task(id: sleutel) {
+                titels = []
+                await laad(opnieuw: true)
+            }
             .refreshable { await laad(opnieuw: true) }
         }
     }
@@ -110,9 +136,13 @@ struct ThuisScherm: View {
 
     private var raster: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 12)], spacing: 18) {
+            if titels.isEmpty && !fout {
+                ForEach(0..<12, id: \.self) { _ in Skelet() }
+            }
             ForEach(titels) { t in
                 NavigationLink(value: t.keuze(serie)) { TitelKaart(titel: t, serie: serie) }
                     .buttonStyle(.plain)
+                    .matchedTransitionSource(id: t.keuze(serie), in: zoom)
                     .onAppear {
                         if t.id == titels.last?.id { Task { await laad(opnieuw: false) } }
                     }
@@ -120,8 +150,19 @@ struct ThuisScherm: View {
         }
         .padding(.horizontal)
         .overlay(alignment: .top) {
-            if titels.isEmpty && laden { ProgressView().padding(.top, 40) }
+            if titels.isEmpty && fout {
+                ContentUnavailableView {
+                    Label("Geen verbinding", systemImage: "wifi.slash")
+                } description: {
+                    Text("De titels konden niet worden geladen.")
+                } actions: {
+                    Button("Opnieuw proberen") { Task { await laad(opnieuw: true) } }
+                        .buttonStyle(.borderedProminent)
+                }
+                .background(Color.achtergrond)
+            }
         }
+        .animation(.easeOut(duration: 0.25), value: titels.isEmpty)
     }
 
     private func laad(opnieuw: Bool) async {
@@ -148,7 +189,13 @@ struct ThuisScherm: View {
         }
 
         let vorige = sleutel
-        guard let p: Pagina = await TMDB.haal(pad, extra), vorige == sleutel else { return }
+        if opnieuw { fout = false }
+        let antwoord: Pagina? = await TMDB.haal(pad, extra)
+        guard vorige == sleutel else { return }
+        guard let p = antwoord else {
+            if opnieuw { titels = []; fout = true }
+            return
+        }
         pagina = p.page
         totaal = min(p.total_pages, 25)
         if opnieuw {
@@ -163,6 +210,7 @@ struct ThuisScherm: View {
 struct Uitgelicht: View {
     let titels: [Titel]
     let serie: Bool
+    let zoom: Namespace.ID
     @State private var keuze = 0
 
     var body: some View {
@@ -183,16 +231,31 @@ struct Uitgelicht: View {
                                     .tracking(1.5)
                                     .foregroundStyle(Color.goud)
                                 Text(t.naam)
-                                    .font(.kop(26))
+                                    .font(.kop(28))
                                     .foregroundStyle(.white)
                                     .lineLimit(2)
+                                    .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
+                                HStack(spacing: 6) {
+                                    Image(systemName: "info.circle")
+                                    Text("Bekijk")
+                                }
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.achtergrond)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(Color.goud, in: Capsule())
+                                .padding(.top, 4)
                             }
                             .padding(18)
                         }
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                        }
                         .padding(.horizontal)
                 }
                 .buttonStyle(.plain)
+                .matchedTransitionSource(id: t.keuze(serie), in: zoom)
                 .tag(i)
             }
         }

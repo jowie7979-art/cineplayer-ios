@@ -4,6 +4,7 @@ private let kolommen = [GridItem(.adaptive(minimum: 104), spacing: 12)]
 
 struct ZoekScherm: View {
     @Environment(Bibliotheek.self) private var bib
+    @Namespace private var zoom
     @State private var tekst = ""
     @State private var resultaten: [Titel] = []
     @State private var bezig = false
@@ -13,6 +14,11 @@ struct ZoekScherm: View {
             ScrollView {
                 if tekst.trimmingCharacters(in: .whitespaces).isEmpty {
                     recent
+                } else if resultaten.isEmpty && bezig {
+                    LazyVGrid(columns: kolommen, spacing: 18) {
+                        ForEach(0..<9, id: \.self) { _ in Skelet() }
+                    }
+                    .padding()
                 } else if resultaten.isEmpty && !bezig {
                     ContentUnavailableView.search(text: tekst)
                         .padding(.top, 60)
@@ -21,6 +27,7 @@ struct ZoekScherm: View {
                         ForEach(resultaten) { t in
                             NavigationLink(value: t.keuze(false)) { TitelKaart(titel: t, serie: t.isSerie(false)) }
                                 .buttonStyle(.plain)
+                                .matchedTransitionSource(id: t.keuze(false), in: zoom)
                         }
                     }
                     .padding()
@@ -30,7 +37,9 @@ struct ZoekScherm: View {
             .navigationTitle("Zoeken")
             .searchable(text: $tekst, prompt: "Films en series")
             .onSubmit(of: .search) { bib.onthoudZoekopdracht(tekst) }
-            .navigationDestination(for: Keuze.self) { DetailScherm(keuze: $0) }
+            .navigationDestination(for: Keuze.self) { k in
+                DetailScherm(keuze: k).navigationTransition(.zoom(sourceID: k, in: zoom))
+            }
             .task(id: tekst) {
                 let q = tekst.trimmingCharacters(in: .whitespaces)
                 guard !q.isEmpty else { resultaten = []; return }
@@ -84,6 +93,7 @@ struct ZoekScherm: View {
 
 struct FavorietenScherm: View {
     @Environment(Bibliotheek.self) private var bib
+    @Namespace private var zoom
 
     var body: some View {
         NavigationStack {
@@ -104,9 +114,10 @@ struct FavorietenScherm: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            .matchedTransitionSource(id: b.keuze, in: zoom)
                             .contextMenu {
                                 Button("Uit favorieten", systemImage: "heart.slash", role: .destructive) {
-                                    bib.wisselFavoriet(b.keuze)
+                                    withAnimation(.snappy) { bib.wisselFavoriet(b.keuze) }
                                 }
                             }
                         }
@@ -116,7 +127,9 @@ struct FavorietenScherm: View {
             }
             .background(Color.achtergrond)
             .navigationTitle("Favorieten")
-            .navigationDestination(for: Keuze.self) { DetailScherm(keuze: $0) }
+            .navigationDestination(for: Keuze.self) { k in
+                DetailScherm(keuze: k).navigationTransition(.zoom(sourceID: k, in: zoom))
+            }
         }
     }
 }
@@ -160,6 +173,7 @@ struct GeschiedenisScherm: View {
                                         .background(Color.goud, in: Circle())
                                 }
                                 .buttonStyle(.borderless)
+                                .accessibilityLabel("Afspelen")
                             }
                             .listRowBackground(Color.achtergrond)
                             .swipeActions {

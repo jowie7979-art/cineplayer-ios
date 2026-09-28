@@ -6,6 +6,7 @@ struct SpelerScherm: View {
     @Environment(\.dismiss) private var dismiss
     @State private var huidig: Afspelen
     @State private var herlaad = 0
+    @State private var sleep: CGFloat = 0
 
     init(start: Afspelen) { _huidig = State(initialValue: start) }
 
@@ -21,6 +22,8 @@ struct SpelerScherm: View {
                 .ignoresSafeArea(edges: [.bottom, .horizontal])
         }
         .background(Color.black.ignoresSafeArea())
+        .offset(y: sleep)
+        .animation(.interactiveSpring(), value: sleep)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .task {
@@ -38,6 +41,7 @@ struct SpelerScherm: View {
                     .frame(width: 36, height: 36)
                     .background(.white.opacity(0.1), in: Circle())
             }
+            .accessibilityLabel("Sluiten")
             VStack(alignment: .leading, spacing: 1) {
                 Text(huidig.keuze.naam)
                     .font(.kop(17))
@@ -79,10 +83,23 @@ struct SpelerScherm: View {
                     .frame(width: 36, height: 36)
                     .background(.white.opacity(0.1), in: Circle())
             }
+            .accessibilityLabel("Bron en opties")
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 12)
+                .onChanged { w in sleep = max(0, w.translation.height) }
+                .onEnded { w in
+                    if w.translation.height > 110 || w.predictedEndTranslation.height > 260 {
+                        dismiss()
+                    } else {
+                        sleep = 0
+                    }
+                }
+        )
     }
 }
 

@@ -6,6 +6,7 @@ struct DetailScherm: View {
     @State private var details: Details?
     @State private var seizoen = 1
     @State private var afleveringen: [Aflevering] = []
+    @State private var trek: CGFloat = 0
 
     private var seizoenen: [Seizoen] { (details?.seasons ?? []).filter { $0.season_number > 0 } }
     private var stand: Bewaard? { bib.stand(keuze) }
@@ -30,17 +31,26 @@ struct DetailScherm: View {
             }
             .padding(.bottom, 32)
         }
+        .onScrollGeometryChange(for: CGFloat.self) { g in
+            g.contentOffset.y + g.contentInsets.top
+        } action: { _, nieuw in
+            trek = nieuw
+        }
         .background(Color.achtergrond)
         .ignoresSafeArea(edges: .top)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    bib.wisselFavoriet(keuze)
+                    withAnimation(.spring(duration: 0.35)) { bib.wisselFavoriet(keuze) }
                 } label: {
                     Image(systemName: bib.isFavoriet(keuze) ? "heart.fill" : "heart")
                         .foregroundStyle(bib.isFavoriet(keuze) ? Color.red : Color.primary)
+                        .contentTransition(.symbolEffect(.replace))
+                        .symbolEffect(.bounce, value: bib.isFavoriet(keuze))
                 }
+                .accessibilityLabel(bib.isFavoriet(keuze) ? "Uit favorieten" : "Aan favorieten toevoegen")
                 .sensoryFeedback(.impact(weight: .light), trigger: bib.isFavoriet(keuze))
             }
         }
@@ -63,21 +73,29 @@ struct DetailScherm: View {
     private var kop: some View {
         ZStack(alignment: .bottomLeading) {
             Color.kaart
-                .frame(height: 300)
+                .frame(height: 340 + max(0, -trek))
                 .overlay { Beeld(pad: details?.backdrop_path ?? keuze.backdrop ?? keuze.poster, maat: "w1280") }
                 .clipped()
+                .offset(y: min(0, trek))
                 .overlay {
                     LinearGradient(colors: [.black.opacity(0.3), .clear, Color.achtergrond.opacity(0.85), Color.achtergrond],
                                    startPoint: .top, endPoint: .bottom)
                 }
             HStack(alignment: .bottom, spacing: 14) {
                 PosterVlak(pad: details?.poster_path ?? keuze.poster, hoek: 10)
-                    .frame(width: 96)
+                    .frame(width: 104)
                     .shadow(color: .black.opacity(0.5), radius: 14, y: 8)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(keuze.naam)
-                        .font(.kop(26))
+                        .font(.kop(28))
                         .lineLimit(3)
+                        .minimumScaleFactor(0.8)
+                    if let t = details?.tagline, !t.isEmpty {
+                        Text(t)
+                            .font(.system(.footnote, design: .serif).italic())
+                            .foregroundStyle(Color.goud.opacity(0.9))
+                            .lineLimit(2)
+                    }
                     Text(infoRegel)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -119,9 +137,14 @@ struct DetailScherm: View {
             Label(hoofdknop, systemImage: "play.fill")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
+                .padding(.vertical, 15)
                 .foregroundStyle(Color.achtergrond)
-                .background(Color.goud, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(
+                    LinearGradient(colors: [Color(red: 0.86, green: 0.74, blue: 0.51), Color.goud,
+                                            Color(red: 0.70, green: 0.57, blue: 0.36)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .shadow(color: Color.goud.opacity(0.25), radius: 14, y: 6)
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.impact, trigger: bib.speelt?.id)
@@ -149,12 +172,21 @@ struct DetailScherm: View {
                     .font(.subheadline.weight(.medium))
                 }
             }
-            if afleveringen.isEmpty {
-                ProgressView().frame(maxWidth: .infinity).padding(.vertical, 20)
-            }
             LazyVStack(spacing: 14) {
+                if afleveringen.isEmpty {
+                    ForEach(0..<4, id: \.self) { _ in
+                        HStack(spacing: 12) {
+                            Skelet(verhouding: 16 / 9).frame(width: 132)
+                            VStack(alignment: .leading, spacing: 6) {
+                                RoundedRectangle(cornerRadius: 4).fill(Color.kaart).frame(height: 12)
+                                RoundedRectangle(cornerRadius: 4).fill(Color.kaart).frame(width: 90, height: 10)
+                            }
+                        }
+                    }
+                }
                 ForEach(afleveringen) { a in
                     AfleveringRegel(aflevering: a, stand: stand)
+                        .transition(.opacity)
                         .onTapGesture {
                             bib.speel(keuze, seizoen: a.season_number, aflevering: a.episode_number, seizoenen: seizoenen)
                         }
