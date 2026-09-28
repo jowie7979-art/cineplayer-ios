@@ -3,6 +3,10 @@
   "appName": "CinePlayer",
   "webDir": "www",
   "backgroundColor": "#0A0A0C",
+  "server": {
+    "url": "https://jowie7979-art.github.io/cineplayer-ios/app/",
+    "allowNavigation": ["*"]
+  },
   "ios": {
     "contentInset": "never",
     "backgroundColor": "#0A0A0C",
