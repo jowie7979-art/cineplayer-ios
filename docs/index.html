@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CinePlayer — Installeer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Inter:wght@300;400;500&display=swap">
+<style>
+  :root {
+    --bg: #0A0A0C;
+    --surface: #14141A;
+    --gold: #C8A96E;
+    --gold-dim: rgba(200,169,110,.15);
+    --text: #F0EDE8;
+    --muted: #6B6875;
+    --safe-top: env(safe-area-inset-top,0px);
+    --safe-bot: env(safe-area-inset-bottom,0px);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: calc(var(--safe-top) + 40px) 24px calc(var(--safe-bot) + 40px);
+  }
+
+  .card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 20px;
+    padding: 40px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+  }
+
+  .app-icon {
+    width: 100px;
+    height: 100px;
+    border-radius: 22px;
+    background: var(--bg);
+    border: 1px solid rgba(200,169,110,.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: var(--gold);
+    letter-spacing: .02em;
+    flex-shrink: 0;
+  }
+
+  .header {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .app-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+  .app-name span { color: var(--gold); }
+  .tagline {
+    font-size: .85rem;
+    color: var(--muted);
+    font-weight: 300;
+    letter-spacing: .04em;
+  }
+
+  .features {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .feature {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: .82rem;
+    color: var(--muted);
+  }
+  .feature-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--gold);
+    flex-shrink: 0;
+    opacity: .6;
+  }
+
+  .divider {
+    width: 100%;
+    height: 1px;
+    background: rgba(255,255,255,.06);
+  }
+
+  .install-btn {
+    display: block;
+    width: 100%;
+    background: var(--gold);
+    color: #0A0A0C;
+    text-decoration: none;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: .9rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 16px 24px;
+    border-radius: 12px;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: opacity .15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .install-btn:active { opacity: .8; }
+
+  .footnote {
+    font-size: .72rem;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.5;
+    letter-spacing: .02em;
+  }
+
+  /* Safari-waarschuwing — alleen zichtbaar als browser niet Safari is */
+  .safari-hint {
+    display: none;
+    background: rgba(200,169,110,.08);
+    border: 1px solid rgba(200,169,110,.2);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: .78rem;
+    color: var(--gold);
+    text-align: center;
+    line-height: 1.5;
+  }
+  .safari-hint.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="app-icon">C.</div>
+
+  <div class="header">
+    <div class="app-name">Cine<span>.</span>Player</div>
+    <div class="tagline">Films &amp; series — altijd bij de hand</div>
+  </div>
+
+  <div class="features">
+    <div class="feature"><div class="feature-dot"></div>Zoek en speel films &amp; series af</div>
+    <div class="feature"><div class="feature-dot"></div>Vier videobronnen als fallback</div>
+    <div class="feature"><div class="feature-dot"></div>Volledig scherm, iPhone-geoptimaliseerd</div>
+    <div class="feature"><div class="feature-dot"></div>Geen account, geen abonnement</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="safari-hint" id="safariHint">
+    Open deze pagina in <strong>Safari</strong> om de app te installeren.
+  </div>
+
+  <a class="install-btn" id="installBtn"
+     href="itms-services://?action=download-manifest&url=https%3A%2F%2Fjowie7979-art.github.io%2Fcineplayer-ios%2Fmanifest.plist">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8 1v9M4.5 7l3.5 3 3.5-3M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Installeren op iPhone
+  </a>
+
+  <div class="footnote">
+    Vereist een vertrouwde provisioning profile.<br>
+    Alleen beschikbaar voor aangemelde toestellen.
+  </div>
+</div>
+
+<script>
+// Toon waarschuwing als gebruiker niet in Safari zit
+const ua = navigator.userAgent;
+const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
+if (!isSafari) {
+  document.getElementById('safariHint').classList.add('show');
+  document.getElementById('installBtn').style.opacity = '.5';
+  document.getElementById('installBtn').style.pointerEvents = 'none';
+}
+</script>
+
+</body>
+</html>

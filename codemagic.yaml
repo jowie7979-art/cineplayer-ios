@@ -1,0 +1,191 @@
+# CinePlayer — persoonlijke iOS streaming-app van Jawad
+# Bouwt de Capacitor-shell op een Codemagic Mac en distribueert naar TestFlight
+# of direct als ad hoc IPA voor installatie via https://jawad.cineplayer.app/installeer
+#
+# Variabelen (groep "cineplayer_appstore" in Codemagic, kopieer uit valorem_appstore):
+#   APP_STORE_CONNECT_ISSUER_ID
+#   APP_STORE_CONNECT_KEY_IDENTIFIER
+#   APP_STORE_CONNECT_PRIVATE_KEY
+#   CERTIFICATE_PRIVATE_KEY
+# Optioneel voor ios-direct:
+#   GH_TOKEN   — fine-grained GitHub token met write:release rechten op deze repo
+
+workflows:
+
+  # ── TestFlight ──────────────────────────────────────────────────────────────
+  ios-testflight:
+    name: iOS → TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - cineplayer_appstore
+      vars:
+        BUNDLE_ID: nl.jawad.cineplayer
+        XCODE_SCHEME: App
+      xcode: 27.0
+      node: 22
+    scripts:
+      - name: Capacitor installeren en iOS-project aanmaken
+        script: |
+          set -eo pipefail
+          npm install
+          npx cap add ios
+          npx cap sync ios
+      - name: ATS — willekeurige HTTPS-verbindingen toestaan (streaming)
+        script: |
+          INFO=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$INFO" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$INFO"
+          /usr/libexec/PlistBuddy -c "Add :WKWebView dict" "$INFO" 2>/dev/null || true
+      - name: Ondertekening (App Store)
+        script: |
+          set -eo pipefail
+          pem() {
+            if printf %s "$1" | grep -q -- "-----BEGIN"; then printf %s "$1"; echo
+            else echo "-----BEGIN $2-----"; printf %s "$1" | tr -d "[:space:]" | fold -w 64; echo; echo "-----END $2-----"; fi
+          }
+          mkdir -p "$HOME/sleutels"
+          pem "$APP_STORE_CONNECT_PRIVATE_KEY" "PRIVATE KEY" > "$HOME/sleutels/asc.p8"
+          pem "$CERTIFICATE_PRIVATE_KEY" "RSA PRIVATE KEY" > "$HOME/sleutels/cert.pem"
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create \
+            --issuer-id @env:APP_STORE_CONNECT_ISSUER_ID \
+            --key-id @env:APP_STORE_CONNECT_KEY_IDENTIFIER \
+            --private-key "@file:$HOME/sleutels/asc.p8" \
+            --certificate-key "@file:$HOME/sleutels/cert.pem"
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Buildnummer
+        script: |
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*/CURRENT_PROJECT_VERSION = $BUILD_NUMBER/" \
+            ios/App/App.xcodeproj/project.pbxproj || true
+      - name: Bouwen
+        script: xcode-project build-ipa --project ios/App/App.xcodeproj --scheme "$XCODE_SCHEME"
+      - name: Naar TestFlight
+        script: |
+          app-store-connect publish --path build/ios/ipa/*.ipa \
+            --issuer-id @env:APP_STORE_CONNECT_ISSUER_ID \
+            --key-id @env:APP_STORE_CONNECT_KEY_IDENTIFIER \
+            --private-key "@file:$HOME/sleutels/asc.p8"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+  # ── Ad hoc — direct op de iPhone ────────────────────────────────────────────
+  # IPA wordt naar een GitHub Release geüpload; manifest.plist op GitHub Pages
+  # wijst ernaar; installeer-pagina staat op https://jowie7979-art.github.io/cineplayer-ios/
+  ios-direct:
+    name: iOS → direct op iPhone (ad hoc)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - cineplayer_appstore
+      vars:
+        BUNDLE_ID: nl.jawad.cineplayer
+        XCODE_SCHEME: App
+        GH_REPO: jowie7979-art/cineplayer-ios
+      xcode: 27.0
+      node: 22
+    scripts:
+      - name: Capacitor installeren en iOS-project aanmaken
+        script: |
+          set -eo pipefail
+          npm install
+          npx cap add ios
+          npx cap sync ios
+      - name: ATS — willekeurige HTTPS-verbindingen toestaan
+        script: |
+          INFO=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$INFO" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$INFO"
+      - name: Sleutels
+        script: |
+          set -eo pipefail
+          pem() {
+            if printf %s "$1" | grep -q -- "-----BEGIN"; then printf %s "$1"; echo
+            else echo "-----BEGIN $2-----"; printf %s "$1" | tr -d "[:space:]" | fold -w 64; echo; echo "-----END $2-----"; fi
+          }
+          mkdir -p "$HOME/sleutels"
+          pem "$APP_STORE_CONNECT_PRIVATE_KEY" "PRIVATE KEY" > "$HOME/sleutels/asc.p8"
+          pem "$CERTIFICATE_PRIVATE_KEY" "RSA PRIVATE KEY" > "$HOME/sleutels/cert.pem"
+      - name: Ondertekening (ad hoc)
+        script: |
+          set -eo pipefail
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_ADHOC --create \
+            --issuer-id @env:APP_STORE_CONNECT_ISSUER_ID \
+            --key-id @env:APP_STORE_CONNECT_KEY_IDENTIFIER \
+            --private-key "@file:$HOME/sleutels/asc.p8" \
+            --certificate-key "@file:$HOME/sleutels/cert.pem"
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Buildnummer
+        script: |
+          NUMMER=$((1000 + BUILD_NUMBER))
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*/CURRENT_PROJECT_VERSION = $NUMMER/" \
+            ios/App/App.xcodeproj/project.pbxproj || true
+          echo "NUMMER=$NUMMER" >> $CM_ENV
+      - name: Bouwen
+        script: xcode-project build-ipa --project ios/App/App.xcodeproj --scheme "$XCODE_SCHEME"
+      - name: IPA uploaden naar GitHub Release
+        script: |
+          set -eo pipefail
+          IPA=$(ls build/ios/ipa/*.ipa | head -1)
+          TAG="v1.0.$NUMMER"
+          gh release create "$TAG" "$IPA" \
+            --repo "$GH_REPO" \
+            --title "CinePlayer $TAG" \
+            --notes "Automatische build #$NUMMER ($(date '+%d-%m-%Y'))" \
+            --token "$GH_TOKEN" 2>/dev/null || \
+          gh release upload "$TAG" "$IPA" --repo "$GH_REPO" --token "$GH_TOKEN" --clobber
+          IPA_URL="https://github.com/$GH_REPO/releases/download/$TAG/$(basename $IPA)"
+          echo "IPA_URL=$IPA_URL" >> $CM_ENV
+          echo "TAG=$TAG" >> $CM_ENV
+      - name: manifest.plist bijwerken
+        script: |
+          set -eo pipefail
+          git config --global user.email "codemagic@build.ci"
+          git config --global user.name "Codemagic Build"
+          # Pas docs/manifest.plist aan met de nieuwe IPA-URL
+          IPA_BASENAME=$(basename build/ios/ipa/*.ipa)
+          cat > docs/manifest.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>items</key>
+            <array>
+              <dict>
+                <key>assets</key>
+                <array>
+                  <dict>
+                    <key>kind</key>
+                    <string>software-package</string>
+                    <key>url</key>
+                    <string>$IPA_URL</string>
+                  </dict>
+                </array>
+                <key>metadata</key>
+                <dict>
+                  <key>bundle-identifier</key>
+                  <string>nl.jawad.cineplayer</string>
+                  <key>bundle-version</key>
+                  <string>1.0.$NUMMER</string>
+                  <key>kind</key>
+                  <string>software</string>
+                  <key>title</key>
+                  <string>CinePlayer</string>
+                </dict>
+              </dict>
+            </array>
+          </dict>
+          </plist>
+          PLIST
+          git add docs/manifest.plist
+          git commit -m "build: manifest.plist → $TAG"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" HEAD:main
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log

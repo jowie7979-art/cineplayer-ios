@@ -1,0 +1,12 @@
+{
+  "appId": "nl.jawad.cineplayer",
+  "appName": "CinePlayer",
+  "webDir": "www",
+  "backgroundColor": "#0A0A0C",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0A0A0C",
+    "preferredContentMode": "mobile",
+    "allowsLinkPreview": false
+  }
+}
