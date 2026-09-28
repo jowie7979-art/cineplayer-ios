@@ -557,9 +557,9 @@ select:focus { border-color:var(--gold3); }
     <button id="next-ep-btn">Volgende aflevering</button>
     <button id="ep-change-btn">Afleveringen</button>
     <div id="sources">
-      <button class="src-btn" data-src="moviesapi">MoviesAPI</button>
+      <button class="src-btn active" data-src="moviesapi">MoviesAPI</button>
       <button class="src-btn" data-src="vidsrc">VidSrc</button>
-      <button class="src-btn active" data-src="vixcloud">VixCloud</button>
+      <button class="src-btn" data-src="vixcloud">VixCloud</button>
     </div>
     <button id="airplay-btn" aria-label="AirPlay">
       <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
@@ -578,7 +578,7 @@ const MOON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke
 const IMG    = 'https://image.tmdb.org/t/p/';
 const apiKey = 'e716f19ab4d25edc5247239a8f3494f8';
 let searchTimer, currentType = 'movie';
-let currentId = null, currentSrc = 'vixcloud', currentPoster = null, currentSeriesTitle = '';
+let currentId = null, currentSrc = 'moviesapi', currentPoster = null, currentSeriesTitle = '';
 let currentSeason = 1, currentEp = 1, currentIsTV = false;
 let tvSeasons = [], detailSeasons = [], currentGenre = '', currentSort = 'popular';
 const searchField = document.getElementById('search-field');
