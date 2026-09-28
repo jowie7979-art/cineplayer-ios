@@ -7,6 +7,8 @@ struct SpelerScherm: View {
     @State private var huidig: Afspelen
     @State private var herlaad = 0
     @State private var sleep: CGFloat = 0
+    @State private var toonBalk = true
+    @State private var aanraking = 0
 
     init(start: Afspelen) { _huidig = State(initialValue: start) }
 
@@ -16,12 +18,35 @@ struct SpelerScherm: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            balk
+        ZStack(alignment: .top) {
             WebSpeler(adres: adres, herlaad: herlaad)
-                .ignoresSafeArea(edges: [.bottom, .horizontal])
+                .ignoresSafeArea()
+            if toonBalk {
+                balk
+                    .background(
+                        LinearGradient(colors: [.black.opacity(0.85), .black.opacity(0.4), .clear],
+                                       startPoint: .top, endPoint: .bottom)
+                            .ignoresSafeArea()
+                            .padding(.bottom, -30)
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            } else {
+                Color.clear
+                    .frame(height: 56)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                    .onTapGesture { toon() }
+                    .gesture(sluitGebaar)
+                    .accessibilityLabel("Bediening tonen")
+                    .accessibilityAddTraits(.isButton)
+            }
         }
         .background(Color.black.ignoresSafeArea())
+        .task(id: aanraking) {
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.35)) { toonBalk = false }
+        }
         .offset(y: sleep)
         .animation(.interactiveSpring(), value: sleep)
         .statusBarHidden()
@@ -58,6 +83,7 @@ struct SpelerScherm: View {
                     huidig.seizoen = volgende.0
                     huidig.aflevering = volgende.1
                     bib.onthoud(huidig.keuze, seizoen: volgende.0, aflevering: volgende.1)
+                    aanraking += 1
                 } label: {
                     Label("Volgende", systemImage: "forward.end.fill")
                         .font(.caption.weight(.semibold))
@@ -72,7 +98,7 @@ struct SpelerScherm: View {
                 Picker("Bron", selection: Binding(get: { bib.bron }, set: { bib.kiesBron($0) })) {
                     ForEach(Bron.allCases) { Text($0.naam).tag($0) }
                 }
-                Button("Opnieuw laden", systemImage: "arrow.clockwise") { herlaad += 1 }
+                Button("Opnieuw laden", systemImage: "arrow.clockwise") { herlaad += 1; aanraking += 1 }
                 Button(bib.isFavoriet(huidig.keuze) ? "Uit favorieten" : "Aan favorieten toevoegen",
                        systemImage: bib.isFavoriet(huidig.keuze) ? "heart.slash" : "heart") {
                     bib.wisselFavoriet(huidig.keuze)
@@ -89,17 +115,25 @@ struct SpelerScherm: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 12)
-                .onChanged { w in sleep = max(0, w.translation.height) }
-                .onEnded { w in
-                    if w.translation.height > 110 || w.predictedEndTranslation.height > 260 {
-                        dismiss()
-                    } else {
-                        sleep = 0
-                    }
+        .onTapGesture { aanraking += 1 }
+        .gesture(sluitGebaar)
+    }
+
+    private var sluitGebaar: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { w in sleep = max(0, w.translation.height) }
+            .onEnded { w in
+                if w.translation.height > 110 || w.predictedEndTranslation.height > 260 {
+                    dismiss()
+                } else {
+                    sleep = 0
                 }
-        )
+            }
+    }
+
+    private func toon() {
+        withAnimation(.easeInOut(duration: 0.3)) { toonBalk = true }
+        aanraking += 1
     }
 }
 
