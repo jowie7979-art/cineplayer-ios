@@ -10,6 +10,10 @@ struct DetailScherm: View {
 
     private var seizoenen: [Seizoen] { (details?.seasons ?? []).filter { $0.season_number > 0 } }
     private var stand: Bewaard? { bib.stand(keuze) }
+    /// Wat Afspelen zou starten: dat laadt de Voorlader alvast.
+    private var voorAdres: String {
+        bib.bron.adres(keuze.tmdb, serie: keuze.serie, seizoen: stand?.seizoen ?? 1, aflevering: stand?.aflevering ?? 1)
+    }
 
     var body: some View {
         ScrollView {
@@ -54,6 +58,8 @@ struct DetailScherm: View {
                 .sensoryFeedback(.impact(weight: .light), trigger: bib.isFavoriet(keuze))
             }
         }
+        .onAppear { Voorlader.gedeeld.voorladen(voorAdres) }
+        .onDisappear { Voorlader.gedeeld.verlaat(voorAdres) }
         .task {
             details = await TMDB.haal("/\(keuze.serie ? "tv" : "movie")/\(keuze.tmdb)")
             if let s = stand, seizoenen.contains(where: { $0.season_number == s.seizoen }) {

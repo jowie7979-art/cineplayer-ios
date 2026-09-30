@@ -47,6 +47,7 @@ struct Hoofdscherm: View {
             Tab(role: .search) { ZoekScherm() }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .task { Voorlader.gedeeld.opwarmen(bron: bib.bron) }
         .fullScreenCover(item: $bib.speelt) { spel in
             SpelerScherm(start: spel)
         }

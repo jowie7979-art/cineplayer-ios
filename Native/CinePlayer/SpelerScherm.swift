@@ -1,6 +1,4 @@
 import SwiftUI
-import WebKit
-import AVKit
 
 struct SpelerScherm: View {
     @Environment(Bibliotheek.self) private var bib
@@ -10,11 +8,9 @@ struct SpelerScherm: View {
     @State private var sleep: CGFloat = 0
     @State private var aanraking = 0
     @State private var tvHulp = false
-    @State private var stand: Stand = .laden
-
-    enum Stand: Equatable { case laden, traag, klaar, speelt }
 
     @ViewBuilder private var laadMelding: some View {
+        let stand = Voorlader.gedeeld.toestand.stand
         switch stand {
         case .laden, .traag:
             VStack(spacing: 12) {
@@ -28,7 +24,7 @@ struct SpelerScherm: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black.opacity(0.55))
             .transition(.opacity)
-        case .klaar:
+        case .tikken:
             Text("Klaar, tik op afspelen")
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 14).padding(.vertical, 8)
@@ -37,7 +33,7 @@ struct SpelerScherm: View {
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(.top, 16)
                 .transition(.opacity)
-        case .speelt:
+        case .leeg, .klaar, .speelt:
             EmptyView()
         }
     }
@@ -54,16 +50,11 @@ struct SpelerScherm: View {
         // dus een balk die verdwijnt kwam niet meer terug.
         VStack(spacing: 0) {
             balk
-            WebSpeler(adres: adres, herlaad: herlaad) { stand = $0 }
+            WebSpeler(adres: adres, herlaad: herlaad)
                 .ignoresSafeArea(edges: .bottom)
                 .overlay { laadMelding.allowsHitTesting(false) }
         }
         .background(Color.black.ignoresSafeArea())
-        .task(id: "\(adres)|\(herlaad)") {
-            stand = .laden
-            try? await Task.sleep(for: .seconds(25))
-            if !Task.isCancelled, stand == .laden { stand = .traag }
-        }
         .offset(y: sleep)
         .animation(.interactiveSpring(), value: sleep)
         .statusBarHidden()
@@ -128,6 +119,9 @@ struct SpelerScherm: View {
                     ForEach(Bron.allCases) { Text($0.naam).tag($0) }
                 }
                 Button("Opnieuw laden", systemImage: "arrow.clockwise") { herlaad += 1; aanraking += 1 }
+                Toggle("Reclame blokkeren", systemImage: "hand.raised", isOn: Binding(
+                    get: { Voorlader.gedeeld.toestand.reclameBlokkeren },
+                    set: { Voorlader.gedeeld.zetReclameBlokkeren($0) }))
                 Button(bib.isFavoriet(huidig.keuze) ? "Uit favorieten" : "Aan favorieten toevoegen",
                        systemImage: bib.isFavoriet(huidig.keuze) ? "heart.slash" : "heart") {
                     bib.wisselFavoriet(huidig.keuze)
@@ -161,119 +155,40 @@ struct SpelerScherm: View {
     }
 }
 
-/// Toont de bron in een iframe met sandbox: de bron kan het venster niet
-/// overnemen en geen pop-ups openen. De basis-URL geeft de bron een referrer.
+/// Houder voor de gedeelde webview van de Voorlader: die heeft de bron vaak
+/// al geladen terwijl je op het detailscherm zat.
 struct WebSpeler: UIViewRepresentable {
     let adres: String
     let herlaad: Int
 
-    var meld: (SpelerScherm.Stand) -> Void = { _ in }
-
-    func makeCoordinator() -> Regelaar { Regelaar() }
-
-    func makeUIView(context: Context) -> WKWebView {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
-        try? AVAudioSession.sharedInstance().setActive(true)
-        let cfg = WKWebViewConfiguration()
-        cfg.allowsInlineMediaPlayback = true
-        cfg.allowsPictureInPictureMediaPlayback = true
-        // Uit: de bronnen spelen via MSE-streams die AirPlay niet kan
-        // doorgeven (tv toont dan alleen een muzieknoot). Schermsynchronisatie werkt wel.
-        cfg.allowsAirPlayForMediaPlayback = false
-        cfg.mediaTypesRequiringUserActionForPlayback = []
-        cfg.preferences.isElementFullscreenEnabled = true
-        // Script in alle frames (ook de iframe van de bron): meldt wanneer de
-        // video kan spelen en start hem dan zelf.
-        cfg.userContentController.addUserScript(WKUserScript(
-            source: Regelaar.volgScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
-        cfg.userContentController.add(context.coordinator, name: "cine")
-        let web = WKWebView(frame: .zero, configuration: cfg)
-        web.isOpaque = false
-        web.backgroundColor = .black
-        web.scrollView.backgroundColor = .black
-        web.scrollView.isScrollEnabled = false
-        web.scrollView.contentInsetAdjustmentBehavior = .never
-        web.navigationDelegate = context.coordinator
-        web.uiDelegate = context.coordinator
-        laad(web, context.coordinator)
-        return web
-    }
-
-    func updateUIView(_ web: WKWebView, context: Context) {
-        context.coordinator.meld = meld
-        if context.coordinator.adres != adres || context.coordinator.herlaad != herlaad {
-            laad(web, context.coordinator)
-        }
-    }
-
-    private func laad(_ web: WKWebView, _ r: Regelaar) {
-        r.adres = adres
-        r.herlaad = herlaad
-        let bron = adres.replacingOccurrences(of: "\"", with: "")
-        let html = """
-        <!doctype html><html><head>
-        <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-        <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}
-        iframe{border:0;width:100%;height:100%;display:block}</style></head>
-        <body><iframe src="\(bron)" referrerpolicy="origin"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
-        allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe></body></html>
-        """
-        web.loadHTMLString(html, baseURL: Regelaar.basis)
-    }
-
-    @MainActor final class Regelaar: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
-        static let basis = URL(string: "https://jowie7979-art.github.io/cineplayer-ios/")!
-        var adres = ""
+    final class Houder: UIView {
         var herlaad = 0
-        var meld: (SpelerScherm.Stand) -> Void = { _ in }
-
-        static let volgScript = """
-        (function(){
-          if (window.__cine) return; window.__cine = 1;
-          function meld(s){ try { webkit.messageHandlers.cine.postMessage(s); } catch(e) {} }
-          function koppel(v){
-            if (v.__cine) return; v.__cine = 1;
-            v.addEventListener('canplay', function(){
-              if (v.paused) {
-                meld('klaar');
-                if (!v.__gestart) { v.__gestart = 1; var p = v.play(); if (p) p.catch(function(){}); }
-              }
-            });
-            v.addEventListener('playing', function(){ meld('speelt'); });
-            v.addEventListener('waiting', function(){ meld('laden'); });
-            if (v.readyState >= 3) v.dispatchEvent(new Event('canplay'));
-            else if (!v.paused) meld('speelt');
-          }
-          function zoek(){ document.querySelectorAll('video').forEach(koppel); }
-          new MutationObserver(zoek).observe(document.documentElement, {childList:true, subtree:true});
-          zoek();
-        })();
-        """
-
-        func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
-            let stand: SpelerScherm.Stand? = switch message.body as? String {
-                case "klaar": .klaar
-                case "speelt": .speelt
-                case "laden": .laden
-                default: nil
-            }
-            if let stand { withAnimation(.easeInOut(duration: 0.25)) { meld(stand) } }
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            subviews.forEach { $0.frame = bounds }
         }
-
-        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            if navigationAction.targetFrame?.isMainFrame ?? true,
-               navigationAction.request.url?.host != Regelaar.basis.host {
-                decisionHandler(.cancel)
-                return
-            }
-            decisionHandler(.allow)
+        // Pas afspelen als de speler echt in beeld staat.
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil { Voorlader.gedeeld.inBeeld() }
         }
+    }
 
-        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
-                     for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-            nil
-        }
+    func makeUIView(context: Context) -> Houder {
+        let h = Houder()
+        h.backgroundColor = .black
+        h.herlaad = herlaad
+        Voorlader.gedeeld.toon(in: h, adres: adres)
+        return h
+    }
+
+    func updateUIView(_ h: Houder, context: Context) {
+        let opnieuw = h.herlaad != herlaad
+        h.herlaad = herlaad
+        Voorlader.gedeeld.bereid(adres, opnieuw: opnieuw)
+    }
+
+    static func dismantleUIView(_ h: Houder, coordinator: ()) {
+        Voorlader.gedeeld.verberg(uit: h)
     }
 }
