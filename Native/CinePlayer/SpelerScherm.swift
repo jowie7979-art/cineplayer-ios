@@ -22,7 +22,7 @@ struct SpelerScherm: View {
             .foregroundStyle(.white)
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black.opacity(0.55))
+            .background(Color.black.opacity(Voorlader.gedeeld.toestand.duur > 0 ? 0 : 0.55))
             .transition(.opacity)
         case .tikken:
             Text("Klaar, tik op afspelen")
@@ -45,16 +45,26 @@ struct SpelerScherm: View {
                        seizoen: huidig.seizoen, aflevering: huidig.aflevering)
     }
 
+    @Environment(\.verticalSizeClass) private var hoogte
+    private var liggend: Bool { hoogte == .compact }
+
     var body: some View {
-        // Balk vast boven de speler: tikken op de film gaat naar de bron,
-        // dus een balk die verdwijnt kwam niet meer terug.
+        // Staand: balk vast boven de speler. Liggend: alleen de film, de
+        // eigen bediening heeft dan een knop terug.
+        let t = Voorlader.gedeeld.toestand
         VStack(spacing: 0) {
-            balk
+            if !liggend { balk }
             WebSpeler(adres: adres, herlaad: herlaad)
-                .ignoresSafeArea(edges: .bottom)
+                .ignoresSafeArea(edges: liggend ? .all : .bottom)
+                .overlay {
+                    if t.eigenBediening && t.duur > 0 {
+                        Bediening(toestand: t, titel: huidig.keuze.naam, liggend: liggend, draai: draai)
+                    }
+                }
                 .overlay { laadMelding.allowsHitTesting(false) }
         }
         .background(Color.black.ignoresSafeArea())
+        .onDisappear { if liggend { draai(false) } }
         .offset(y: sleep)
         .animation(.interactiveSpring(), value: sleep)
         .statusBarHidden()
@@ -122,6 +132,9 @@ struct SpelerScherm: View {
                 Toggle("Reclame blokkeren", systemImage: "hand.raised", isOn: Binding(
                     get: { Voorlader.gedeeld.toestand.reclameBlokkeren },
                     set: { Voorlader.gedeeld.zetReclameBlokkeren($0) }))
+                Toggle("Eigen bediening", systemImage: "slider.horizontal.below.rectangle", isOn: Binding(
+                    get: { Voorlader.gedeeld.toestand.eigenBediening },
+                    set: { Voorlader.gedeeld.zetEigenBediening($0) }))
                 Button(bib.isFavoriet(huidig.keuze) ? "Uit favorieten" : "Aan favorieten toevoegen",
                        systemImage: bib.isFavoriet(huidig.keuze) ? "heart.slash" : "heart") {
                     bib.wisselFavoriet(huidig.keuze)
@@ -140,6 +153,11 @@ struct SpelerScherm: View {
         .contentShape(Rectangle())
         .onTapGesture { aanraking += 1 }
         .gesture(sluitGebaar)
+    }
+
+    private func draai(_ liggend: Bool) {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: liggend ? .landscapeRight : .portrait))
     }
 
     private var sluitGebaar: some Gesture {

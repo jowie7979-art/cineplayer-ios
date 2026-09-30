@@ -8,6 +8,13 @@ final class SpelerToestand {
     enum Stand { case leeg, laden, traag, klaar, tikken, speelt }
     var stand: Stand = .leeg
     var reclameBlokkeren = !UserDefaults.standard.bool(forKey: "reclameToestaan")
+    /// Eigen knoppen in plaats van die van de bron (uit te zetten in ⋯).
+    var eigenBediening = !UserDefaults.standard.bool(forKey: "bronBediening")
+    var tijd: Double = 0
+    var duur: Double = 0
+    var gepauzeerd = true
+    var sporen: [String] = []
+    var spoor = -1
 }
 
 /// Eén speler voor de hele app. Laadt de bron al zodra je een titel opent,
@@ -102,12 +109,61 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         if !adres.isEmpty { laad(adres) }
     }
 
+    // MARK: eigen bediening
+
+    func zetEigenBediening(_ aan: Bool) {
+        toestand.eigenBediening = aan
+        UserDefaults.standard.set(!aan, forKey: "bronBediening")
+        zetScripts()
+        guard let frame = videoFrame else { return }
+        web.evaluateJavaScript("window.__cineEigen = \(aan); window.__cineVerberg && window.__cineVerberg(\(aan)); true",
+                               in: frame, in: .page, completionHandler: nil)
+    }
+
+    func speelPauze() {
+        toestand.gepauzeerd.toggle()
+        bedien("if (v.paused) { window.__cineActief = true; await v.play(); } else { v.pause(); }")
+    }
+
+    func spring(_ s: Double) {
+        toestand.tijd = max(0, min(toestand.duur, toestand.tijd + s))
+        bedien("v.currentTime = Math.max(0, Math.min(v.duration - 1, v.currentTime + s));", ["s": s])
+    }
+
+    func zoek(_ t: Double) {
+        toestand.tijd = t
+        bedien("v.currentTime = t;", ["t": t])
+    }
+
+    func kiesSpoor(_ i: Int) {
+        toestand.spoor = i
+        bedien("""
+        var n = 0;
+        for (var k = 0; k < v.textTracks.length; k++) {
+          var s = v.textTracks[k];
+          if (s.kind === 'subtitles' || s.kind === 'captions') { s.mode = (n === i) ? 'showing' : 'disabled'; n++; }
+        }
+        """, ["i": i])
+    }
+
+    /// Voert een opdracht uit op de hoofdvideo (v) in het frame van de bron.
+    private func bedien(_ js: String, _ args: [String: Any] = [:]) {
+        guard let frame = videoFrame else { return }
+        web.callAsyncJavaScript("var v = window.__cineVideo && window.__cineVideo(); if (!v) return false;\n" + js + "\nreturn true;",
+                                arguments: args, in: frame, in: .page, completionHandler: nil)
+    }
+
     // MARK: laden
 
     private func laad(_ adres: String) {
         self.adres = adres
         gestart = false
         videoFrame = nil
+        toestand.tijd = 0
+        toestand.duur = 0
+        toestand.gepauzeerd = true
+        toestand.sporen = []
+        toestand.spoor = -1
         zet(.laden)
         traag?.cancel()
         traag = Task {
@@ -209,7 +265,8 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// actuele stand mee: niet actief = video direct weer op pauze.
     private func zetScripts() {
         inhoud.removeAllUserScripts()
-        inhoud.addUserScript(WKUserScript(source: "window.__cineActief = \(actief);\n" + Self.volgScript,
+        let vlaggen = "window.__cineActief = \(actief); window.__cineEigen = \(toestand.eigenBediening);\n"
+        inhoud.addUserScript(WKUserScript(source: vlaggen + Self.volgScript,
                                           injectionTime: .atDocumentStart, forMainFrameOnly: false))
     }
 
@@ -234,7 +291,23 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     // MARK: berichten van het script
 
     func userContentController(_ c: WKUserContentController, didReceive bericht: WKScriptMessage) {
-        guard !adres.isEmpty, let s = bericht.body as? String else { return }
+        guard !adres.isEmpty else { return }
+        if let d = bericht.body as? [String: Any] {
+            switch d["soort"] as? String {
+            case "tijd":
+                videoFrame = bericht.frameInfo
+                toestand.tijd = d["t"] as? Double ?? 0
+                toestand.duur = d["d"] as? Double ?? 0
+                toestand.gepauzeerd = d["p"] as? Bool ?? true
+            case "sporen":
+                toestand.sporen = d["l"] as? [String] ?? []
+                toestand.spoor = d["a"] as? Int ?? -1
+            default:
+                break
+            }
+            return
+        }
+        guard let s = bericht.body as? String else { return }
         switch s {
         case "klaar":
             videoFrame = bericht.frameInfo
@@ -287,6 +360,52 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
       }, true);
       document.addEventListener('playing', function(e){ if (video(e)) meld('speelt'); }, true);
       document.addEventListener('waiting', function(e){ if (video(e)) meld('laden'); }, true);
+
+      // Eigen bediening: alles van de bron onzichtbaar behalve de video.
+      window.__cineVerberg = function(aan){
+        var s = document.getElementById('__cine_stijl');
+        if (aan && !s) {
+          s = document.createElement('style'); s.id = '__cine_stijl';
+          s.textContent = 'html body *{visibility:hidden!important}html body video{visibility:visible!important}';
+          (document.head || document.documentElement).appendChild(s);
+        }
+        if (!aan && s) s.remove();
+      };
+      // Hoofdvideo = de langste (reclamefilmpjes zijn kort).
+      window.__cineVideo = function(){
+        var l = Array.prototype.slice.call(document.querySelectorAll('video'));
+        l.sort(function(a, b){ return (b.duration || 0) - (a.duration || 0); });
+        return l[0];
+      };
+      var laatst = 0;
+      function tijd(e){
+        var v = e.target;
+        if (!video(e) || !(v.duration > 60)) return;
+        if (e.type === 'timeupdate') { var nu = Date.now(); if (nu - laatst < 400) return; laatst = nu; }
+        if (window.__cineEigen) window.__cineVerberg(true);
+        meld({soort: 'tijd', t: v.currentTime, d: v.duration, p: v.paused});
+      }
+      ['timeupdate', 'durationchange', 'loadedmetadata', 'play', 'pause', 'seeked'].forEach(function(n){
+        document.addEventListener(n, tijd, true);
+      });
+      function sporen(){
+        var v = window.__cineVideo(); if (!v) return;
+        var l = [], a = -1;
+        for (var i = 0; i < v.textTracks.length; i++) {
+          var s = v.textTracks[i];
+          if (s.kind === 'subtitles' || s.kind === 'captions') {
+            if (s.mode === 'showing') a = l.length;
+            l.push(s.label || s.language || ('Spoor ' + (l.length + 1)));
+          }
+        }
+        meld({soort: 'sporen', l: l, a: a});
+      }
+      document.addEventListener('loadedmetadata', function(e){
+        if (!video(e)) return;
+        sporen();
+        e.target.textTracks.addEventListener('addtrack', sporen);
+        e.target.textTracks.addEventListener('change', sporen);
+      }, true);
     })();
     """
 
