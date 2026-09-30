@@ -10,6 +10,37 @@ struct SpelerScherm: View {
     @State private var sleep: CGFloat = 0
     @State private var aanraking = 0
     @State private var tvHulp = false
+    @State private var stand: Stand = .laden
+
+    enum Stand: Equatable { case laden, traag, klaar, speelt }
+
+    @ViewBuilder private var laadMelding: some View {
+        switch stand {
+        case .laden, .traag:
+            VStack(spacing: 12) {
+                ProgressView().tint(.white).controlSize(.large)
+                Text(stand == .laden ? "Film laden…" : "Duurt lang. Tik op afspelen of kies een andere bron via ⋯")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(.white)
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black.opacity(0.55))
+            .transition(.opacity)
+        case .klaar:
+            Text("Klaar, tik op afspelen")
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(Color.goud, in: Capsule())
+                .foregroundStyle(.black)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .padding(.top, 16)
+                .transition(.opacity)
+        case .speelt:
+            EmptyView()
+        }
+    }
 
     init(start: Afspelen) { _huidig = State(initialValue: start) }
 
@@ -23,10 +54,16 @@ struct SpelerScherm: View {
         // dus een balk die verdwijnt kwam niet meer terug.
         VStack(spacing: 0) {
             balk
-            WebSpeler(adres: adres, herlaad: herlaad)
+            WebSpeler(adres: adres, herlaad: herlaad) { stand = $0 }
                 .ignoresSafeArea(edges: .bottom)
+                .overlay { laadMelding.allowsHitTesting(false) }
         }
         .background(Color.black.ignoresSafeArea())
+        .task(id: "\(adres)|\(herlaad)") {
+            stand = .laden
+            try? await Task.sleep(for: .seconds(25))
+            if !Task.isCancelled, stand == .laden { stand = .traag }
+        }
         .offset(y: sleep)
         .animation(.interactiveSpring(), value: sleep)
         .statusBarHidden()
@@ -130,6 +167,8 @@ struct WebSpeler: UIViewRepresentable {
     let adres: String
     let herlaad: Int
 
+    var meld: (SpelerScherm.Stand) -> Void = { _ in }
+
     func makeCoordinator() -> Regelaar { Regelaar() }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -143,6 +182,11 @@ struct WebSpeler: UIViewRepresentable {
         cfg.allowsAirPlayForMediaPlayback = false
         cfg.mediaTypesRequiringUserActionForPlayback = []
         cfg.preferences.isElementFullscreenEnabled = true
+        // Script in alle frames (ook de iframe van de bron): meldt wanneer de
+        // video kan spelen en start hem dan zelf.
+        cfg.userContentController.addUserScript(WKUserScript(
+            source: Regelaar.volgScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
+        cfg.userContentController.add(context.coordinator, name: "cine")
         let web = WKWebView(frame: .zero, configuration: cfg)
         web.isOpaque = false
         web.backgroundColor = .black
@@ -156,6 +200,7 @@ struct WebSpeler: UIViewRepresentable {
     }
 
     func updateUIView(_ web: WKWebView, context: Context) {
+        context.coordinator.meld = meld
         if context.coordinator.adres != adres || context.coordinator.herlaad != herlaad {
             laad(web, context.coordinator)
         }
@@ -177,10 +222,44 @@ struct WebSpeler: UIViewRepresentable {
         web.loadHTMLString(html, baseURL: Regelaar.basis)
     }
 
-    @MainActor final class Regelaar: NSObject, WKNavigationDelegate, WKUIDelegate {
+    @MainActor final class Regelaar: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         static let basis = URL(string: "https://jowie7979-art.github.io/cineplayer-ios/")!
         var adres = ""
         var herlaad = 0
+        var meld: (SpelerScherm.Stand) -> Void = { _ in }
+
+        static let volgScript = """
+        (function(){
+          if (window.__cine) return; window.__cine = 1;
+          function meld(s){ try { webkit.messageHandlers.cine.postMessage(s); } catch(e) {} }
+          function koppel(v){
+            if (v.__cine) return; v.__cine = 1;
+            v.addEventListener('canplay', function(){
+              if (v.paused) {
+                meld('klaar');
+                if (!v.__gestart) { v.__gestart = 1; var p = v.play(); if (p) p.catch(function(){}); }
+              }
+            });
+            v.addEventListener('playing', function(){ meld('speelt'); });
+            v.addEventListener('waiting', function(){ meld('laden'); });
+            if (v.readyState >= 3) v.dispatchEvent(new Event('canplay'));
+            else if (!v.paused) meld('speelt');
+          }
+          function zoek(){ document.querySelectorAll('video').forEach(koppel); }
+          new MutationObserver(zoek).observe(document.documentElement, {childList:true, subtree:true});
+          zoek();
+        })();
+        """
+
+        func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
+            let stand: SpelerScherm.Stand? = switch message.body as? String {
+                case "klaar": .klaar
+                case "speelt": .speelt
+                case "laden": .laden
+                default: nil
+            }
+            if let stand { withAnimation(.easeInOut(duration: 0.25)) { meld(stand) } }
+        }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
