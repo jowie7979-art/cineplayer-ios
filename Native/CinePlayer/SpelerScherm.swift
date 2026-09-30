@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import AVKit
 
 struct SpelerScherm: View {
     @Environment(Bibliotheek.self) private var bib
@@ -94,6 +95,10 @@ struct SpelerScherm: View {
                 }
                 .sensoryFeedback(.impact, trigger: huidig.aflevering)
             }
+            AirPlayKnop()
+                .frame(width: 36, height: 36)
+                .background(.white.opacity(0.1), in: Circle())
+                .accessibilityLabel("AirPlay")
             Menu {
                 Picker("Bron", selection: Binding(get: { bib.bron }, set: { bib.kiesBron($0) })) {
                     ForEach(Bron.allCases) { Text($0.naam).tag($0) }
@@ -137,6 +142,19 @@ struct SpelerScherm: View {
     }
 }
 
+/// Systeemknop voor AirPlay: kies een tv en de video in de speler gaat erheen.
+struct AirPlayKnop: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let v = AVRoutePickerView()
+        v.tintColor = .white
+        v.activeTintColor = UIColor(Color.goud)
+        v.prioritizesVideoDevices = true
+        return v
+    }
+
+    func updateUIView(_ v: AVRoutePickerView, context: Context) {}
+}
+
 /// Toont de bron in een iframe met sandbox: de bron kan het venster niet
 /// overnemen en geen pop-ups openen. De basis-URL geeft de bron een referrer.
 struct WebSpeler: UIViewRepresentable {
@@ -146,6 +164,8 @@ struct WebSpeler: UIViewRepresentable {
     func makeCoordinator() -> Regelaar { Regelaar() }
 
     func makeUIView(context: Context) -> WKWebView {
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
+        try? AVAudioSession.sharedInstance().setActive(true)
         let cfg = WKWebViewConfiguration()
         cfg.allowsInlineMediaPlayback = true
         cfg.allowsPictureInPictureMediaPlayback = true
