@@ -9,6 +9,7 @@ struct SpelerScherm: View {
     @State private var herlaad = 0
     @State private var sleep: CGFloat = 0
     @State private var aanraking = 0
+    @State private var tvHulp = false
 
     init(start: Afspelen) { _huidig = State(initialValue: start) }
 
@@ -73,10 +74,18 @@ struct SpelerScherm: View {
                 }
                 .sensoryFeedback(.impact, trigger: huidig.aflevering)
             }
-            AirPlayKnop()
-                .frame(width: 36, height: 36)
-                .background(.white.opacity(0.1), in: Circle())
-                .accessibilityLabel("AirPlay")
+            Button { tvHulp = true } label: {
+                Image(systemName: "tv")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 36, height: 36)
+                    .background(.white.opacity(0.1), in: Circle())
+            }
+            .accessibilityLabel("Op tv kijken")
+            .alert("Op tv kijken", isPresented: $tvHulp) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Open het Bedieningspaneel, tik op Schermsynchronisatie en kies je tv. Draai daarna je iPhone en tik in de speler op volledig scherm.")
+            }
             Menu {
                 Picker("Bron", selection: Binding(get: { bib.bron }, set: { bib.kiesBron($0) })) {
                     ForEach(Bron.allCases) { Text($0.naam).tag($0) }
@@ -115,19 +124,6 @@ struct SpelerScherm: View {
     }
 }
 
-/// Systeemknop voor AirPlay: kies een tv en de video in de speler gaat erheen.
-struct AirPlayKnop: UIViewRepresentable {
-    func makeUIView(context: Context) -> AVRoutePickerView {
-        let v = AVRoutePickerView()
-        v.tintColor = .white
-        v.activeTintColor = UIColor(Color.goud)
-        v.prioritizesVideoDevices = true
-        return v
-    }
-
-    func updateUIView(_ v: AVRoutePickerView, context: Context) {}
-}
-
 /// Toont de bron in een iframe met sandbox: de bron kan het venster niet
 /// overnemen en geen pop-ups openen. De basis-URL geeft de bron een referrer.
 struct WebSpeler: UIViewRepresentable {
@@ -142,7 +138,9 @@ struct WebSpeler: UIViewRepresentable {
         let cfg = WKWebViewConfiguration()
         cfg.allowsInlineMediaPlayback = true
         cfg.allowsPictureInPictureMediaPlayback = true
-        cfg.allowsAirPlayForMediaPlayback = true
+        // Uit: de bronnen spelen via MSE-streams die AirPlay niet kan
+        // doorgeven (tv toont dan alleen een muzieknoot). Schermsynchronisatie werkt wel.
+        cfg.allowsAirPlayForMediaPlayback = false
         cfg.mediaTypesRequiringUserActionForPlayback = []
         cfg.preferences.isElementFullscreenEnabled = true
         let web = WKWebView(frame: .zero, configuration: cfg)
