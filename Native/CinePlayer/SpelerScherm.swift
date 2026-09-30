@@ -8,6 +8,7 @@ struct SpelerScherm: View {
     @State private var sleep: CGFloat = 0
     @State private var aanraking = 0
     @State private var tvHulp = false
+    @State private var gedraaid = false
 
     @ViewBuilder private var laadMelding: some View {
         let stand = Voorlader.gedeeld.toestand.stand
@@ -65,6 +66,12 @@ struct SpelerScherm: View {
         }
         .background(Color.black.ignoresSafeArea())
         .onDisappear { if liggend { draai(false) } }
+        // Film begint: vanzelf liggend, ook met draaivergrendeling aan.
+        .onChange(of: t.stand) { _, nieuw in
+            guard nieuw == .speelt, !gedraaid else { return }
+            gedraaid = true
+            if !liggend { draai(true) }
+        }
         .offset(y: sleep)
         .animation(.interactiveSpring(), value: sleep)
         .statusBarHidden()
