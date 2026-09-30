@@ -8,7 +8,6 @@ struct SpelerScherm: View {
     @State private var huidig: Afspelen
     @State private var herlaad = 0
     @State private var sleep: CGFloat = 0
-    @State private var toonBalk = true
     @State private var aanraking = 0
 
     init(start: Afspelen) { _huidig = State(initialValue: start) }
@@ -19,35 +18,14 @@ struct SpelerScherm: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
+        // Balk vast boven de speler: tikken op de film gaat naar de bron,
+        // dus een balk die verdwijnt kwam niet meer terug.
+        VStack(spacing: 0) {
+            balk
             WebSpeler(adres: adres, herlaad: herlaad)
-                .ignoresSafeArea()
-            if toonBalk {
-                balk
-                    .background(
-                        LinearGradient(colors: [.black.opacity(0.85), .black.opacity(0.4), .clear],
-                                       startPoint: .top, endPoint: .bottom)
-                            .ignoresSafeArea()
-                            .padding(.bottom, -30)
-                    )
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            } else {
-                Color.clear
-                    .frame(height: 56)
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
-                    .onTapGesture { toon() }
-                    .gesture(sluitGebaar)
-                    .accessibilityLabel("Bediening tonen")
-                    .accessibilityAddTraits(.isButton)
-            }
+                .ignoresSafeArea(edges: .bottom)
         }
         .background(Color.black.ignoresSafeArea())
-        .task(id: aanraking) {
-            try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.35)) { toonBalk = false }
-        }
         .offset(y: sleep)
         .animation(.interactiveSpring(), value: sleep)
         .statusBarHidden()
@@ -134,11 +112,6 @@ struct SpelerScherm: View {
                     sleep = 0
                 }
             }
-    }
-
-    private func toon() {
-        withAnimation(.easeInOut(duration: 0.3)) { toonBalk = true }
-        aanraking += 1
     }
 }
 
