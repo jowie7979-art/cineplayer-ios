@@ -10,6 +10,7 @@ final class SpelerToestand {
     var reclameBlokkeren = !UserDefaults.standard.bool(forKey: "reclameToestaan")
     /// Eigen knoppen in plaats van die van de bron (uit te zetten in ⋯).
     var eigenBediening = !UserDefaults.standard.bool(forKey: "bronBediening")
+    var ondertitels = !UserDefaults.standard.bool(forKey: "ondertitelsUit")
     var tijd: Double = 0
     var duur: Double = 0
     var gepauzeerd = true
@@ -117,6 +118,16 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         zetScripts()
         guard let frame = videoFrame else { return }
         web.evaluateJavaScript("window.__cineEigen = \(aan); window.__cineVerberg && window.__cineVerberg(\(aan)); true",
+                               in: frame, in: .page, completionHandler: nil)
+    }
+
+    /// Ondertitels van de bron tonen of verbergen (de bron kiest zelf Engels).
+    func zetOndertitels(_ aan: Bool) {
+        toestand.ondertitels = aan
+        UserDefaults.standard.set(!aan, forKey: "ondertitelsUit")
+        zetScripts()
+        guard let frame = videoFrame else { return }
+        web.evaluateJavaScript("window.__cineOt = \(aan); window.__cineOndertitels && window.__cineOndertitels(\(aan) && window.__cineEigen); true",
                                in: frame, in: .page, completionHandler: nil)
     }
 
@@ -265,7 +276,8 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// actuele stand mee: niet actief = video direct weer op pauze.
     private func zetScripts() {
         inhoud.removeAllUserScripts()
-        let vlaggen = "window.__cineActief = \(actief); window.__cineEigen = \(toestand.eigenBediening);\n"
+        let vlaggen = "window.__cineActief = \(actief); window.__cineEigen = \(toestand.eigenBediening); "
+            + "window.__cineOt = \(toestand.ondertitels);\n"
         inhoud.addUserScript(WKUserScript(source: vlaggen + Self.volgScript,
                                           injectionTime: .atDocumentStart, forMainFrameOnly: false))
     }
@@ -361,15 +373,31 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
       document.addEventListener('playing', function(e){ if (video(e)) meld('speelt'); }, true);
       document.addEventListener('waiting', function(e){ if (video(e)) meld('laden'); }, true);
 
-      // Eigen bediening: alles van de bron onzichtbaar behalve de video.
-      window.__cineVerberg = function(aan){
-        var s = document.getElementById('__cine_stijl');
+      // Ondertitels altijd Engels: MoviesAPI kiest Engels zolang er geen
+      // andere keuze (of "uit") is opgeslagen.
+      try {
+        var k = 'vp_subtitle_lang', w = localStorage.getItem(k);
+        if (w && !/^en/i.test(w)) localStorage.removeItem(k);
+      } catch(e) {}
+
+      function stijl(id, aan, css){
+        var s = document.getElementById(id);
         if (aan && !s) {
-          s = document.createElement('style'); s.id = '__cine_stijl';
-          s.textContent = 'html body *{visibility:hidden!important}html body video{visibility:visible!important}';
+          s = document.createElement('style'); s.id = id; s.textContent = css;
           (document.head || document.documentElement).appendChild(s);
         }
         if (!aan && s) s.remove();
+      }
+      // Eigen bediening: alles van de bron onzichtbaar behalve de video
+      // en (als ze aan staan) de ondertitels.
+      window.__cineVerberg = function(aan){
+        stijl('__cine_stijl', aan, 'html body *{visibility:hidden!important}html body video{visibility:visible!important}');
+        window.__cineOndertitels(aan && window.__cineOt);
+      };
+      window.__cineOndertitels = function(aan){
+        var ot = 'html body [class*="captions" i]:not(button):not([class*="button" i])';
+        stijl('__cine_ot', aan, ot + ',' + ot + ' *,html body [data-part="captions"],html body [data-part="captions"] *'
+          + '{visibility:visible!important}');
       };
       // Hoofdvideo = de langste (reclamefilmpjes zijn kort).
       window.__cineVideo = function(){

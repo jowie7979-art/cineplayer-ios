@@ -80,19 +80,16 @@ struct Bediening: View {
             }
             .tint(.goud)
             Text("-" + klok(max(0, toestand.duur - nu)))
-            if !toestand.sporen.isEmpty {
-                Menu {
-                    Picker("Ondertiteling", selection: Binding(get: { toestand.spoor }, set: { v.kiesSpoor($0) })) {
-                        Text("Uit").tag(-1)
-                        ForEach(toestand.sporen.indices, id: \.self) { i in Text(toestand.sporen[i]).tag(i) }
-                    }
-                } label: {
-                    Image(systemName: toestand.spoor >= 0 ? "captions.bubble.fill" : "captions.bubble")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 32, height: 32)
-                }
-                .accessibilityLabel("Ondertiteling")
+            Button {
+                v.zetOndertitels(!toestand.ondertitels)
+                aanraking += 1
+            } label: {
+                Image(systemName: toestand.ondertitels ? "captions.bubble.fill" : "captions.bubble")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(toestand.ondertitels ? Color.goud : .white)
+                    .frame(width: 32, height: 32)
             }
+            .accessibilityLabel(toestand.ondertitels ? "Ondertitels uit" : "Ondertitels aan")
             Button { draai(!liggend) } label: {
                 Image(systemName: liggend ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                     .font(.body.weight(.semibold))
