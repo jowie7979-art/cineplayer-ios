@@ -38,6 +38,8 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     private var gestart = false
     private var videoFrame: WKFrameInfo?
     private var traag: Task<Void, Never>?
+    private var springDoel: Double?
+    private var springTaak: Task<Void, Never>?
 
     // MARK: van buiten
 
@@ -136,14 +138,24 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         bedien("if (v.paused) { window.__cineActief = true; await v.play(); } else { v.pause(); }")
     }
 
+    /// Snel achter elkaar tikken telt op tot één sprong: minder zoeken = minder hangen.
     func spring(_ s: Double) {
-        toestand.tijd = max(0, min(toestand.duur, toestand.tijd + s))
-        bedien("v.currentTime = Math.max(0, Math.min(v.duration - 1, v.currentTime + s));", ["s": s])
+        let doel = max(0, min(toestand.duur - 1, (springDoel ?? toestand.tijd) + s))
+        springDoel = doel
+        toestand.tijd = doel
+        springTaak?.cancel()
+        springTaak = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            springDoel = nil
+            bedien("v.currentTime = t;", ["t": doel])
+        }
     }
 
+    /// Grote sprong (tijdbalk): naar het dichtstbijzijnde beginpunt, dat laadt het snelst.
     func zoek(_ t: Double) {
         toestand.tijd = t
-        bedien("v.currentTime = t;", ["t": t])
+        bedien("if (v.fastSeek) { v.fastSeek(t); } else { v.currentTime = t; }", ["t": t])
     }
 
     func kiesSpoor(_ i: Int) {
@@ -405,6 +417,24 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         l.sort(function(a, b){ return (b.duration || 0) - (a.duration || 0); });
         return l[0];
       };
+      // Hangt de video (na doorspoelen): na 4 s een zetje naar het volgende
+      // stuk dat al binnen is, of 0,3 s verder, en weer afspelen. Hooguit 3 keer.
+      var hangSinds = 0, zetjes = 0;
+      setInterval(function(){
+        var v = window.__cineVideo && window.__cineVideo();
+        if (!v || v.paused || v.ended || !(v.duration > 60)) { hangSinds = 0; return; }
+        if (v.readyState >= 3 && !v.seeking) { hangSinds = 0; zetjes = 0; return; }
+        if (!hangSinds) { hangSinds = Date.now(); return; }
+        if (Date.now() - hangSinds < 4000 || zetjes >= 3) return;
+        hangSinds = Date.now(); zetjes++;
+        var t = v.currentTime, b = v.buffered, doel = t + 0.3;
+        for (var i = 0; i < b.length; i++) {
+          if (b.start(i) > t && b.start(i) - t < 10) { doel = b.start(i) + 0.1; break; }
+        }
+        v.currentTime = doel;
+        var p = v.play(); if (p) p.catch(function(){});
+      }, 1000);
+
       var laatst = 0;
       function tijd(e){
         var v = e.target;
