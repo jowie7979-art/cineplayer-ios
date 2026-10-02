@@ -101,7 +101,7 @@ struct Bewaard: Codable, Identifiable, Hashable {
 }
 
 enum Bron: String, CaseIterable, Identifiable {
-    case moviesapi, vidsrc, vixcloud
+    case moviesapi, vidsrc, vixcloud, quark, talon, comet
     var id: String { rawValue }
 
     /// VixCloud weigert de app (Cloudflare), maar laat Safari wel toe.
@@ -110,19 +110,28 @@ enum Bron: String, CaseIterable, Identifiable {
     var naam: String {
         switch self {
         case .moviesapi: return "MoviesAPI"
-        case .vidsrc: return "VidSrc"
-        case .vixcloud: return "VixCloud"
+        case .vidsrc:    return "VidSrc"
+        case .vixcloud:  return "VixCloud"
+        case .quark:     return "Quark"
+        case .talon:     return "Talon"
+        case .comet:     return "Comet"
         }
     }
 
     func adres(_ id: Int, serie: Bool, seizoen s: Int, aflevering a: Int) -> String {
         switch (self, serie) {
         case (.moviesapi, false): return "https://moviesapi.to/movie/\(id)?lang=en"
-        case (.moviesapi, true): return "https://moviesapi.to/tv/\(id)-\(s)-\(a)?lang=en"
-        case (.vidsrc, false): return "https://vidsrc.to/embed/movie/\(id)?ds_lang=en"
-        case (.vidsrc, true): return "https://vidsrc.to/embed/tv/\(id)/\(s)/\(a)?ds_lang=en"
-        case (.vixcloud, false): return "https://vixsrc.to/movie/\(id)?sub_lang=en"
-        case (.vixcloud, true): return "https://vixsrc.to/tv/\(id)/\(s)/\(a)?sub_lang=en"
+        case (.moviesapi, true):  return "https://moviesapi.to/tv/\(id)-\(s)-\(a)?lang=en"
+        case (.vidsrc, false):    return "https://vidsrc.to/embed/movie/\(id)?ds_lang=en"
+        case (.vidsrc, true):     return "https://vidsrc.to/embed/tv/\(id)/\(s)/\(a)?ds_lang=en"
+        case (.vixcloud, false):  return "https://vixsrc.to/movie/\(id)?sub_lang=en"
+        case (.vixcloud, true):   return "https://vixsrc.to/tv/\(id)/\(s)/\(a)?sub_lang=en"
+        case (.quark, false):     return "https://vidrock.ru/movie/\(id)"
+        case (.quark, true):      return "https://vidrock.ru/tv/\(id)/\(s)/\(a)"
+        case (.talon, false):     return "https://player.zxcstream.xyz/player/movie/\(id)"
+        case (.talon, true):      return "https://player.zxcstream.xyz/player/tv/\(id)/\(s)/\(a)"
+        case (.comet, false):     return "https://vidnest.fun/movie/\(id)"
+        case (.comet, true):      return "https://vidnest.fun/tv/\(id)/\(s)/\(a)"
         }
     }
 }
