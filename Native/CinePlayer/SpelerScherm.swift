@@ -16,7 +16,7 @@ struct SpelerScherm: View {
         case .laden, .traag:
             VStack(spacing: 12) {
                 ProgressView().tint(.white).controlSize(.large)
-                Text(stand == .laden ? "Film laden…" : "Duurt lang. Tik op afspelen of kies een andere bron via ⋯")
+                Text(stand == .laden ? (Voorlader.gedeeld.toestand.duur > 0 ? "Bufferen…" : "Film laden…") : "Duurt lang. Tik op afspelen of kies een andere bron via ⋯")
                     .font(.subheadline)
                     .multilineTextAlignment(.center)
             }
@@ -142,6 +142,9 @@ struct SpelerScherm: View {
                 Toggle("Eigen bediening", systemImage: "slider.horizontal.below.rectangle", isOn: Binding(
                     get: { Voorlader.gedeeld.toestand.eigenBediening },
                     set: { Voorlader.gedeeld.zetEigenBediening($0) }))
+                Toggle("iPhone-buffer", systemImage: "memorychip", isOn: Binding(
+                    get: { Voorlader.gedeeld.toestand.iphoneBuffer },
+                    set: { Voorlader.gedeeld.zetIphoneBuffer($0) }))
                 Button(bib.isFavoriet(huidig.keuze) ? "Uit favorieten" : "Aan favorieten toevoegen",
                        systemImage: bib.isFavoriet(huidig.keuze) ? "heart.slash" : "heart") {
                     bib.wisselFavoriet(huidig.keuze)

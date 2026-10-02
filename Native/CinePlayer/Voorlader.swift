@@ -11,6 +11,8 @@ final class SpelerToestand {
     /// Eigen knoppen in plaats van die van de bron (uit te zetten in ⋯).
     var eigenBediening = !UserDefaults.standard.bool(forKey: "bronBediening")
     var ondertitels = !UserDefaults.standard.bool(forKey: "ondertitelsUit")
+    /// Buffer van iOS zelf in plaats van die van de bron (uit te zetten in ⋯).
+    var iphoneBuffer = !UserDefaults.standard.bool(forKey: "bronBuffer")
     var tijd: Double = 0
     var duur: Double = 0
     var gepauzeerd = true
@@ -109,6 +111,13 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         if let regels {
             if aan { inhoud.add(regels) } else { inhoud.remove(regels) }
         }
+        if !adres.isEmpty { laad(adres) }
+    }
+
+    func zetIphoneBuffer(_ aan: Bool) {
+        toestand.iphoneBuffer = aan
+        UserDefaults.standard.set(!aan, forKey: "bronBuffer")
+        zetScripts()
         if !adres.isEmpty { laad(adres) }
     }
 
@@ -374,6 +383,14 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     static let volgScript = """
     (function(){
       if (window.__cine) return; window.__cine = 1;
+      // iPhone-buffer: zonder MediaSource valt de speler van MoviesAPI terug
+      // op de eigen HLS-speler van iOS. Die buffert verder vooruit, kiest
+      // zelf een lagere kwaliteit bij traag internet en deelt niets via P2P.
+      if (window.__cineNatief && /(^|\\.)moviesapi\\.to$/.test(location.hostname)) {
+        ['ManagedMediaSource', 'MediaSource', 'WebKitMediaSource'].forEach(function(n){
+          try { Object.defineProperty(window, n, {value: undefined, configurable: true}); } catch(e) {}
+        });
+      }
       function meld(s){ try { webkit.messageHandlers.cine.postMessage(s); } catch(e) {} }
       function video(e){ return e.target instanceof HTMLVideoElement; }
       document.addEventListener('play', function(e){
