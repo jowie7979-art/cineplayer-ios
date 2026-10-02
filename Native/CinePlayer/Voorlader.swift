@@ -59,7 +59,7 @@ final class Voorlader: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
 
     /// Detailscherm open: bron alvast laden, niet als de speler al open is.
     func voorladen(_ adres: String) {
-        guard !actief else { return }
+        guard !actief, URL(string: adres)?.host != "vixsrc.to" else { return }
         bereid(adres)
     }
 

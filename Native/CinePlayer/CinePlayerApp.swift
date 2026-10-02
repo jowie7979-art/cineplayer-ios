@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import SafariServices
 
 @main
 struct CinePlayerApp: App {
@@ -49,7 +50,42 @@ struct Hoofdscherm: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .task { Voorlader.gedeeld.opwarmen(bron: bib.bron) }
         .fullScreenCover(item: $bib.speelt) { spel in
-            SpelerScherm(start: spel)
+            if bib.bron.inSafari {
+                SafariSpeler(adres: bib.bron.adres(spel.keuze.tmdb, serie: spel.keuze.serie,
+                                                   seizoen: spel.seizoen, aflevering: spel.aflevering)) {
+                    bib.speelt = nil
+                }
+                .ignoresSafeArea()
+            } else {
+                SpelerScherm(start: spel)
+            }
         }
+    }
+}
+
+/// Bron in Safari binnen de app (eigen knoppen, AirPlay en Klaar van Safari).
+struct SafariSpeler: UIViewControllerRepresentable {
+    let adres: String
+    let klaar: () -> Void
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let cfg = SFSafariViewController.Configuration()
+        cfg.barCollapsingEnabled = true
+        let vc = SFSafariViewController(url: URL(string: adres)!, configuration: cfg)
+        vc.preferredBarTintColor = .black
+        vc.preferredControlTintColor = UIColor(Color.goud)
+        vc.dismissButtonStyle = .close
+        vc.delegate = context.coordinator
+        return vc
+    }
+
+    func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(klaar: klaar) }
+
+    final class Coordinator: NSObject, SFSafariViewControllerDelegate {
+        let klaar: () -> Void
+        init(klaar: @escaping () -> Void) { self.klaar = klaar }
+        func safariViewControllerDidFinish(_ controller: SFSafariViewController) { klaar() }
     }
 }

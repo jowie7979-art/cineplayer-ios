@@ -104,6 +104,9 @@ enum Bron: String, CaseIterable, Identifiable {
     case moviesapi, vidsrc, vixcloud
     var id: String { rawValue }
 
+    /// VixCloud weigert de app (Cloudflare), maar laat Safari wel toe.
+    var inSafari: Bool { self == .vixcloud }
+
     var naam: String {
         switch self {
         case .moviesapi: return "MoviesAPI"

@@ -46,6 +46,20 @@ struct DetailScherm: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Picker("Bron", selection: Binding(get: { bib.bron }, set: { nieuw in
+                        Voorlader.gedeeld.verlaat(voorAdres)
+                        bib.kiesBron(nieuw)
+                        Voorlader.gedeeld.voorladen(voorAdres)
+                    })) {
+                        ForEach(Bron.allCases) { Text($0.naam).tag($0) }
+                    }
+                } label: {
+                    Image(systemName: "server.rack")
+                }
+                .accessibilityLabel("Bron: \(bib.bron.naam)")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     withAnimation(.spring(duration: 0.35)) { bib.wisselFavoriet(keuze) }
                 } label: {
